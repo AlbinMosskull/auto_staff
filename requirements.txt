@@ -2,3 +2,5 @@ openai
 requests
 pydantic
 tk
+flask
+flask-cors

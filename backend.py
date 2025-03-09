@@ -1,9 +1,10 @@
 import requests
 import openai
 from pydantic import BaseModel
+from dataclasses import dataclass
 
 
-CHATGPT_API_KEY = "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"
+CHATGPT_API_KEY = ""
 GPT_MODEL = "gpt-4o-mini"
 
 class StationResponse(BaseModel):
