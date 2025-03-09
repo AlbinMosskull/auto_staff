@@ -1,2 +1,10 @@
 openai
 requests
+ipykernel
+numpy
+scipy
+
+sounddevice # record audio
+pydub       # record audio
+simpleaudio # listen to audio
+# also need to install ffmpeg from github to record audio
