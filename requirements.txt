@@ -3,7 +3,12 @@ requests
 ipykernel
 numpy
 scipy
+pydantic
+tk
+flask
+flask-cors
 
+# Audio
 sounddevice # record audio
 pydub       # record audio
 simpleaudio # listen to audio

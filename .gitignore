@@ -1,3 +1,4 @@
 .venv/
 apikey.txt
 voice_in/tmp
+__pycache__/
