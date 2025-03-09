@@ -5,6 +5,7 @@ import simpleaudio as sa
 from openai import OpenAI
 import os
 import random
+import numpy as np
 
 def speech_to_text(record=True, play_recording=False) -> str:
     """
@@ -135,4 +136,4 @@ def _play_recording(mp3_path: str):
     print("Playback finished.")
 
 if __name__ == "__main__":
-    print(speech_to_text(record=False, play_recording=True))
+    print(speech_to_text(record=True, play_recording=True))

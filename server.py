@@ -2,30 +2,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import time
+from backend import manage_incoming_message_default_settings as manage_incoming_message
+
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-
-def manage_incoming_message(user_input):
-    """
-    This is where your custom logic would go.
-    You could integrate with OpenAI, SL APIs, or any other services here.
-    
-    For this example, we're just returning a dummy response with the user input echoed back.
-    """
-    
-    # Example response format
-    response = f"You asked about: '{user_input}'. Here's information about Stockholm metro stations..."
-    
-    # You could add more sophisticated processing here:
-    if "t-centralen" in user_input.lower():
-        response = "T-Centralen is the central station in Stockholm's metro system, connecting all lines."
-    elif "red line" in user_input.lower():
-        response = "The Red Line (Röda linjen) consists of lines 13 and 14, running from Norsborg/Fruängen to Ropsten/Mörby Centrum."
-    elif "blue line" in user_input.lower():
-        response = "The Blue Line (Blå linjen) consists of line 10 and 11, running from Kungsträdgården to Hjulsta/Akalla."
-    
-    return response
 
 @app.route('/api/message', methods=['POST'])
 def process_message():
