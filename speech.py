@@ -5,6 +5,7 @@ import simpleaudio as sa
 from openai import OpenAI
 import os
 import random
+import numpy as np
 
 def speech_to_text(record=True, play_recording=False) -> str:
     """

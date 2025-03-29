@@ -1,11 +1,7 @@
 import requests
 import openai
 from pydantic import BaseModel
-from dataclasses import dataclass
 
-
-CHATGPT_API_KEY = ""
-GPT_MODEL = "gpt-4o-mini"
 
 class StationResponse(BaseModel):
     station_name: str
@@ -93,6 +89,10 @@ def get_route(origin_id, dest_id, api_key):
         return f"Error making request: {e}"
 
 
+def parse_duration(duration):
+	return duration[2:-1]
+
+
 def create_response_route_info_message(route_info):
 	if not 'Trip' in route_info:
 		return "No trips found for the given stations."
@@ -102,7 +102,7 @@ def create_response_route_info_message(route_info):
 	trip = route_info['Trip'][0]
 	leg_list = trip.get('LegList', {}).get('Leg', [])
 	if leg_list:
-		duration = trip.get('duration')
+		duration = parse_duration(trip.get('duration'))
 		print("\nTrip details:")
 		for leg in leg_list:
 			transport = leg.get('Product', {}).get('name', 'Walking')
@@ -146,9 +146,21 @@ def manage_incoming_message(message, client, model, origin_id, sl_api_key):
 	return create_response_route_info_message(route_info)
 
 
+def manage_incoming_message_default_settings(prompt):
+	f = open('./apikey.txt', 'r', encoding='utf-8')
+	CHATGPT_API_KEY = f.readlines()[0]
+	GPT_MODEL = "gpt-4o-mini"
+	client = create_gpt3_client(CHATGPT_API_KEY)
+	CURRENT_STATION_ID = "300109001"  # T-Centralen
+	SL_API_KEY = "TRAFIKLAB-SLAPI-INTEGRATION-2024"
+	return manage_incoming_message(prompt, client, GPT_MODEL, CURRENT_STATION_ID, SL_API_KEY)
+
 
 
 def main():
+	f = open('./apikey.txt', 'r', encoding='utf-8')
+	CHATGPT_API_KEY = f.readlines()[0]
+	GPT_MODEL = "gpt-4o-mini"
 	client = create_gpt3_client(CHATGPT_API_KEY)
 	CURRENT_STATION_ID = "300109001"  # T-Centralen
 	SL_API_KEY = "TRAFIKLAB-SLAPI-INTEGRATION-2024"
