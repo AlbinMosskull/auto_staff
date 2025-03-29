@@ -9,7 +9,29 @@ import random
 import numpy as np
 import csv
 
-def speech_to_text(record: bool=True, play_recording: bool=False, added_context: str="") -> str:
+
+def get_all_SL_locations():
+    """
+    Get a string with the names of all SL stops. Also add an explanatory prompt before the list of stops
+
+    Returns:
+        str: A string with the names of all SL stops.
+    """
+    names = []
+
+    with open('sites_list.csv', mode='r', encoding='utf-8') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            # Assuming each row contains one name
+            names.append(row[0])  # Add the first column value (the name) to the list
+
+    # Join the list of names into a single string separated by commas
+    result = "Possible locations that user can ask for directions to are: " + ", ".join(names)
+
+    return result
+
+
+def speech_to_text(record: bool=True, play_recording: bool=False, added_context: str=get_all_SL_locations()) -> str:
     """
     Interface to convert a voice request to text
 
@@ -240,28 +262,6 @@ def _play_recording(mp3_path: str):
     play_obj = sa.play_buffer(audio.raw_data, num_channels=audio.channels, bytes_per_sample=audio.sample_width, sample_rate=audio.frame_rate)
     play_obj.wait_done()
     print("Playback finished.")
-
-
-def get_all_SL_locations():
-    """
-    Get a string with the names of all SL stops. Also add an explanatory prompt before the list of stops
-
-    Returns:
-        str: A string with the names of all SL stops.
-    """
-    names = []
-
-    with open('sites_list.csv', mode='r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            # Assuming each row contains one name
-            names.append(row[0])  # Add the first column value (the name) to the list
-
-    # Join the list of names into a single string separated by commas
-    result = "Possible locations that user can ask for directions to are: " + ", ".join(names)
-
-    return result
-
 
 if __name__ == "__main__":
     print(speech_to_text(record=True, play_recording=True, added_context=get_all_SL_locations()))
