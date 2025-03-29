@@ -168,7 +168,8 @@ def manage_route_planning_request(message, client, model, origin_id, sl_api_key)
 
 
 def format_ticket_info(ticket_type, traveler_type):
-	return f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK"
+	# Hack below. Seems to be needed for openai api.
+	return str(f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK")
 
 
 def parse_ticket_info(prompt, client, model):
@@ -194,7 +195,9 @@ def parse_ticket_info(prompt, client, model):
 		traveler_type = response.choices[0].message.parsed.traveler_type
 		assert ticket_type in ticket_types, "Invalid ticket type."
 		assert traveler_type in traveler_types, "Invalid traveler type."
-		print(format_ticket_info(ticket_type, traveler_type))
+		ticket_info = format_ticket_info(ticket_type, traveler_type)
+		print(ticket_info)
+		return ticket_info
 	else:
 		raise ValueError("Parsing failed.")
 
