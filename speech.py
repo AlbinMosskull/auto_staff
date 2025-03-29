@@ -43,7 +43,7 @@ def speech_to_text(record=True, play_recording=False) -> str:
     return transcription.text
 
 
-def text_to_speech(text: str) -> str:
+def text_to_speech(text: str, play_result: bool=True) -> str:
     """
     Interface to convert text to speech
 
@@ -53,7 +53,21 @@ def text_to_speech(text: str) -> str:
     Returns:
     str: file path to a .mp3 file of the speech
     """
-    raise NotImplementedError("Text to speech feature is not yet implemented.")
+    client = OpenAI(api_key=_get_api_key_dev())
+    mp3_path = os.path.join(os.path.dirname(__file__), "voice_out", "tmp", "speech.mp3")
+    
+    with client.audio.speech.with_streaming_response.create(
+        model="gpt-4o-mini-tts",
+        voice="coral",
+        input=text,
+        response_format="mp3"
+    ) as response:
+        response.stream_to_file(mp3_path)
+    
+    if play_result:
+        _play_recording(mp3_path)
+
+    return mp3_path
 
 
 def _get_api_key_dev() -> str:
@@ -84,6 +98,7 @@ def _pick_random_prerecorded_request() -> str:
     random_file_path = f"voice_in/examples/{random_file}"
 
     return random_file_path
+
 
 def _record_voice_request() -> str:
     """
@@ -121,6 +136,7 @@ def _record_voice_request() -> str:
 
     return mp3_path
 
+
 def _play_recording(mp3_path: str):
     """
     Play a voice recording
@@ -134,5 +150,7 @@ def _play_recording(mp3_path: str):
     play_obj.wait_done()
     print("Playback finished.")
 
+
 if __name__ == "__main__":
-    print(speech_to_text(record=False, play_recording=True))
+    # print(speech_to_text(record=False, play_recording=True))
+    text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.")
