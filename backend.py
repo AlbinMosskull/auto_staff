@@ -1,257 +1,170 @@
-import requests
 import openai
 from enum import Enum
-
 from pydantic import BaseModel
+from typing import Union
+
 from tickets import (
+	parse_ticket_info,
 	get_ticket_types,
 	get_traveler_types,
-	get_price
+)
+from route_planning import (
+	manage_route_planning_request,
 )
 
-
-class StationResponse(BaseModel):
-    station_name: str
-
+class QuestionResponse(BaseModel):
+	question: str
 
 class TicketResponse(BaseModel):
 	ticket_type: str
 	traveler_type: str
 
+class DestinationResponse(BaseModel):
+	destination: str
 
 class ResponseType(Enum):
 	ROUTE_PLANNING = "route_planning"
 	TICKET_PURCHASE = "ticket_purchase"
-
+	ADDITIONAL_QUESTION = "additional_question"
 
 class ResponseMessage(BaseModel):
 	response_type: ResponseType
+	sub_response: Union[TicketResponse, DestinationResponse, QuestionResponse]
+
+
 
 
 def create_gpt3_client(api_key):
 	return openai.OpenAI(api_key=api_key)
 
 
-def parse_destination(prompt, client, model):
-	messages = [{"role": "system", "content": "Your task is to parse the name of a station in the Stockholm metro from a user prompt."},
-				{"role": "system", "content": "Example: I would like to go to Näckrosen. Then the correct output is 'Näckrosen'."}]
 
-	response = client.beta.chat.completions.parse(
-	model=model,
-	messages= messages + 
-		[{"role": "user", "content": prompt}],
-	response_format=StationResponse
-	)
+def manage_incoming_message(message_history, client, model, origin_id, sl_api_key):
+	system_messages = [
+				{"role": "system", "content": "You Metro Auto-Staff, an assistant helping travelers in the Stockholm metro."},
+				{"role": "system", "content": "You have two tasks that you help with. Navigating to a certain station, or selling tickets to users."},
+				{"role": "system", "content": "If you do not have enough context to help with these tasks, you ask a question to learn more."},
+				{"role": "system", "content": "You are polite, but does not engage in small talk beyond your task."},
 
-	if response.choices[0].message.parsed:
-		assert isinstance(response.choices[0].message.parsed, StationResponse), "Unexpected response type."
-		return response.choices[0].message.parsed.station_name
-	else:
-		return None
+				# Task 1: Route Planning
+				{"role": "system", "content": "If the user is asking about how to go somewhere, then you want to determine their desired destination."},
+				{"role": "system", "content": "Your task is to parse the name of a station in the Stockholm metro from the user prompt."},
+				{"role": "system", "content": "Example: I would like to go to Näckrosen. Then the correct output is 'Näckrosen'."},
 
-
-def lookup_station_id(station_name, api_key):
-	"""
-	Fetches the SiteId of a stop based on the provided destination name.
-
-	:param destination_name: The name of the destination (max 20 characters).
-	:return: A list of stops with SiteId, Name, and Type, or an error message string.
-	"""
-	base_url = "https://journeyplanner.integration.sl.se/v1/typeahead.json"
-	params = {
-		"key": api_key,
-		"searchstring": station_name,
-		"stationsonly": "true",
-		"maxresults": 5
-	}
-
-	try:
-		response = requests.get(base_url, params=params)
-		response.raise_for_status()
-		data = response.json()
-		
-		if data["StatusCode"] != 0:
-			return f"Error: {data['Message']}"
-		
-		stops = data.get("ResponseData", [])
-		
-		if not stops:
-			return "No stops found."
-		
-		return [{"Name": stop["Name"], "SiteId": stop["SiteId"], "Type": stop["Type"]} for stop in stops]
-
-	except requests.RequestException as e:
-		return f"Request failed: {e}"
-
-
-def get_route(origin_id, dest_id, api_key):
-    """
-    Get route suggestions between two stations using SL's Route Planner API
-    
-    Args:
-        origin_id (str): Starting station ID (9 digits, e.g., '300109001')
-        dest_id (str): Destination station ID (9 digits, e.g., '300109001')
-        api_key (str): Your API key for the SL Route Planner
-    """
-    base_url = "https://journeyplanner.integration.sl.se/v1/TravelplannerV3_1/trip.json"
-    
-    params = {
-        'key': api_key,
-        'originExtId': origin_id,
-        'destExtId': dest_id,
-        'lang': 'en'  # Response language (en/sv/de)
-    }
-    
-    try:
-        response = requests.get(base_url, params=params)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return f"Error making request: {e}"
-
-
-def parse_duration(duration):
-	return duration[2:-1]
-
-
-def create_response_route_info_message(route_info):
-	if not 'Trip' in route_info:
-		return "No trips found for the given stations."
-
-	# Get the first trip only
-	response_message = ""
-	trip = route_info['Trip'][0]
-	leg_list = trip.get('LegList', {}).get('Leg', [])
-	if leg_list:
-		duration = parse_duration(trip.get('duration'))
-		print("\nTrip details:")
-		for leg in leg_list:
-			transport = leg.get('Product', {}).get('name', 'Walking')
-			origin = leg['Origin']['name']
-			destination = leg['Destination']['name']
-			response_message += f"Take the {transport} from {origin} to {destination}\n"
-			print(f"Take the {transport} from {origin} to {destination}")
-		response_message += f"Total duration: {duration} minutes"
-		print(f"Total duration: {duration} minutes")
-		return response_message
-	else:
-		return "No trip details found."
-
-
-
-def manage_route_planning_request(message, client, model, origin_id, sl_api_key):
-	# Currently we always assume the request is a route planning request
-	destination_name = parse_destination(message, client, model)
-	if not destination_name:
-		print("Sorry, I couldn't understand the destination you provided. Please try again.")
-		return
-	
-	print("INFO:", f"Destination station: {destination_name}")
-	
-	destination_id_infos = lookup_station_id(destination_name, sl_api_key)
-	if isinstance(destination_id_infos, str):
-		print(destination_id_infos)
-		return
-	
-	destination_id_info = destination_id_infos[0]
-	print("INFO:", f"Destination station ID: {destination_id_info['SiteId']}")
-	
-	destination_id = destination_id_info["SiteId"]
-
-	route_info = get_route(origin_id, destination_id, sl_api_key)
-
-	if isinstance(route_info, str):
-		print(route_info)
-		return
-
-	return create_response_route_info_message(route_info)
-
-
-def format_ticket_info(ticket_type, traveler_type):
-	# Hack below. Seems to be needed for openai api.
-	return str(f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK")
-
-
-def parse_ticket_info(prompt, client, model):
-	# Example prompt: I would like to buy a single ticket, I am a student
-
-	ticket_types = get_ticket_types()
-	traveler_types = get_traveler_types()
-
-	messages = [{"role": "system", "content": "Your task is to parse the ticket type and traveler type from a user prompt."},
+				# Task 2: Ticket Purchase
+				{"role": "system", "content": "If the user asks about buying a ticket, your task is to parse the ticket type and traveler type from a user prompt."},
+				{"role": "system", "content": "However, if that information cannot be parsed, ask a question instead."},
 				{"role": "system", "content": "Example: I would like to buy a single ticket, I am a student. Then the correct output is 'single', 'student'."},
-				{"role": "system", "content": "Available ticket types: " + str(ticket_types)},
-				{"role": "system", "content": "Available traveler types: " + str(traveler_types)}]
+				{"role": "system", "content": "Available ticket types: " + str(get_ticket_types())},
+				{"role": "system", "content": "Available traveler types: " + str(get_traveler_types())},
+				{"role": "system", "content": "If the user has not told you which traveler type they are, you need to ask them about it by asking an additional_question."},
 
-	response = client.beta.chat.completions.parse(
-		model=model,
-		messages= messages + 
-			[{"role": "user", "content": prompt}],
-		response_format=TicketResponse
-	)
-	if response.choices[0].message.parsed:
-		assert isinstance(response.choices[0].message.parsed, TicketResponse), "Unexpected response type."
-		ticket_type = response.choices[0].message.parsed.ticket_type
-		traveler_type = response.choices[0].message.parsed.traveler_type
-		assert ticket_type in ticket_types, "Invalid ticket type."
-		assert traveler_type in traveler_types, "Invalid traveler type."
-		ticket_info = format_ticket_info(ticket_type, traveler_type)
-		print(ticket_info)
-		return ticket_info
-	else:
-		raise ValueError("Parsing failed.")
-
-
-def manage_incoming_message(message, client, model, origin_id, sl_api_key):
-	# Determine if the message is a route planning request or a ticket purchase request
-	# by doing a model call
-
-	messages = [{"role": "system", "content": "Your task is to determine if the user is asking for route planning or ticket purchase."},
-				{"role": "system", "content": "Example: I would like to go to T-Centralen. Then the correct output is 'route planning'."},
-				{"role": "system", "content": "Example: I would like to buy a single ticket, I am a student. Then the correct output is 'ticket purchase'."}]
+				# Task 3: Additional Question
+				{"role": "system", "content": "If the user does not provide enough information, you ask a question to learn more."},
+				{"role": "system", "content": "Example: I would like to buy a single ticket. Then you should ask about which of the traveler types they are."},
+				{"role": "system", "content": "Make absolutely sure you know everything you need by asking questions before you do one of the tasks above."},
+				{"role": "system", "content": "Only ask about information not yet provided."},
+				{"role": "system", "content": "Set the response type to 'additional_question'."},
+			]
 	
 	response = client.beta.chat.completions.parse(
 		model=model,
-		messages= messages + 
-			[{"role": "user", "content": message}],
+		messages= system_messages + message_history,
 		response_format=ResponseMessage
 	)
-	if response.choices[0].message.parsed:
-		message_type = response.choices[0].message.parsed.response_type.value
-		if message_type == ResponseType.ROUTE_PLANNING.value:
-			return manage_route_planning_request(message, client, model, origin_id, sl_api_key)
-		elif message_type == ResponseType.TICKET_PURCHASE.value:
-			return parse_ticket_info(message, client, model)
-		else:
-			return "Unknown request type."
-	else:
+
+	parsed_message = response.choices[0].message.parsed
+	if not parsed_message:
+		print("ERROR: Failed to parse response.")
 		return "Parsing failed."
 
+	message_type = parsed_message.response_type.value
+	message_content = parsed_message.sub_response
+		
+	print("message_type:", message_type)
+	print("message_content:", message_content)
+
+	if message_type == ResponseType.ROUTE_PLANNING.value:
+		print("INFO:", "Route planning request")
+		destination_name = message_content.destination
+		route_info = manage_route_planning_request(destination_name, origin_id, sl_api_key)
+		return route_info
+
+	elif message_type == ResponseType.TICKET_PURCHASE.value:
+		print("INFO:", "Ticket purchase request")
+		ticket_type = message_content.ticket_type
+		traveler_type = message_content.traveler_type
+
+		ticket_info = parse_ticket_info(ticket_type, traveler_type)
+		return ticket_info
+	
+	elif message_type == ResponseType.ADDITIONAL_QUESTION.value:
+		print("INFO:", "Additional question request")
+		question = message_content.question
+
+		return question
+		
+	
+	else:
+		return "Unknown request type."
 
 
-def manage_incoming_message_default_settings(prompt):
+
+class AutoStaffModel:
+	"""
+	This class receives the user input.
+
+	It stores the user input and uses it to determine which action to take.
+
+	It returns the response that is to be communicated to the user.
+	"""
+
+	def __init__(self, client, model, station_id, sl_api_key):
+		self.client = client
+		self.model = model
+		self.station_id = station_id
+		self.sl_api_key = sl_api_key
+		self._received_messages = []
+
+	def add_message(self, message, role="user"):
+		self._received_messages.append(
+			{"role": role, "content": message}
+		)
+
+	def produce_response(self):
+		"""
+		Decide upon an action to take based on the history of the conversation.
+		"""
+		response = manage_incoming_message(
+			self._received_messages,
+			self.client,
+			self.model,
+			self.station_id,
+			self.sl_api_key
+		)
+		self.add_message(response, role="assistant")
+		return response
+
+
+def create_auto_staff_model_default_settings():
 	f = open('./apikey.txt', 'r', encoding='utf-8')
 	CHATGPT_API_KEY = f.readlines()[0]
 	GPT_MODEL = "gpt-4o-mini"
 	client = create_gpt3_client(CHATGPT_API_KEY)
 	CURRENT_STATION_ID = "300109001"  # T-Centralen
 	SL_API_KEY = "TRAFIKLAB-SLAPI-INTEGRATION-2024"
-	return manage_incoming_message(prompt, client, GPT_MODEL, CURRENT_STATION_ID, SL_API_KEY)
+	return AutoStaffModel(client, GPT_MODEL, CURRENT_STATION_ID, SL_API_KEY)
 
 
 
 def main():
-	f = open('./apikey.txt', 'r', encoding='utf-8')
-	CHATGPT_API_KEY = f.readlines()[0]
-	GPT_MODEL = "gpt-4o-mini"
-	client = create_gpt3_client(CHATGPT_API_KEY)
-	CURRENT_STATION_ID = "300109001"  # T-Centralen
-	SL_API_KEY = "TRAFIKLAB-SLAPI-INTEGRATION-2024"
+	auto_staff_model = create_auto_staff_model_default_settings()
 
 	while True:
-		print("")
-		user_input = input("What can I help you with? ")
-		manage_incoming_message(user_input, client, GPT_MODEL, CURRENT_STATION_ID, SL_API_KEY)
+		user_input = input("User: ")
+		auto_staff_model.add_message(user_input)
+		response = auto_staff_model.produce_response()
+		print(f"Assistant: {response}")
 
 
 if __name__ == "__main__":

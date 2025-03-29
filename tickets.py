@@ -1,5 +1,4 @@
 
-
 _TICKET_TYPES = {
     "single": {"normal": 43, "retiree": 26, "student": 26, "youth": 26},
     "24h": {"normal": 180, "retiree": 110, "student": 110, "youth": 110},
@@ -18,3 +17,14 @@ def get_traveler_types():
 
 def get_price(ticket_type, traveler_type):
     return _TICKET_TYPES.get(ticket_type, {}).get(traveler_type, None)
+
+
+def format_ticket_info(ticket_type, traveler_type):
+	# Hack below. Seems to be needed for openai api.
+	return str(f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK")
+
+
+def parse_ticket_info(ticket_type, traveler_type):
+	ticket_info = format_ticket_info(ticket_type, traveler_type)
+	print(ticket_info)
+	return ticket_info
