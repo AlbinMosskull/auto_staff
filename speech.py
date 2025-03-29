@@ -7,8 +7,9 @@ import os
 import time
 import random
 import numpy as np
+import csv
 
-def speech_to_text(record=True, play_recording=False) -> str:
+def speech_to_text(record: bool=True, play_recording: bool=False, added_context: str="") -> str:
     """
     Interface to convert a voice request to text
 
@@ -39,7 +40,9 @@ def speech_to_text(record=True, play_recording=False) -> str:
     voice_file = open(voice_recording_path, "rb")
     transcription = client.audio.transcriptions.create(
         model="whisper-1", 
-        file=voice_file
+        file=voice_file,
+        language="en",
+        prompt="You should expect users to speak to you in English. It is very likely that they will use certain names or locations in Swedish.\n" + added_context
     )
 
     return transcription.text
@@ -115,7 +118,7 @@ def _record_voice_request() -> str:
     Returns:
     str: file path to .mp3 file of voice recording
     """
-    folder = "voice_in/tmp"
+    folder = "voice_in\\tmp"
     if not os.path.isdir(folder):
         raise FileNotFoundError(f"Folder '{folder}' does not exist. Please create it first.")
 
@@ -151,7 +154,7 @@ def _record_voice_request_dyn() -> str:
     Returns:
     str: file path to .mp3 file of voice recording
     """
-    folder = "voice_in/tmp"
+    folder = "voice_in\\tmp"
     if not os.path.isdir(folder):
         raise FileNotFoundError(f"Folder '{folder}' does not exist. Please create it first.")
 
@@ -239,6 +242,27 @@ def _play_recording(mp3_path: str):
     print("Playback finished.")
 
 
+def get_all_SL_locations():
+    """
+    Get a string with the names of all SL stops. Also add an explanatory prompt before the list of stops
+
+    Returns:
+        str: A string with the names of all SL stops.
+    """
+    names = []
+
+    with open('sites_list.csv', mode='r', encoding='utf-8') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            # Assuming each row contains one name
+            names.append(row[0])  # Add the first column value (the name) to the list
+
+    # Join the list of names into a single string separated by commas
+    result = "Possible locations that user can ask for directions to are: " + ", ".join(names)
+
+    return result
+
+
 if __name__ == "__main__":
-    # print(speech_to_text(record=True, play_recording=True))
-    text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.", randomize_voice=True)
+    print(speech_to_text(record=True, play_recording=True, added_context=get_all_SL_locations()))
+    # text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.", randomize_voice=True)
