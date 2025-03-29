@@ -4,6 +4,7 @@ from pydub import AudioSegment
 import simpleaudio as sa
 from openai import OpenAI
 import os
+import time
 import random
 import numpy as np
 
@@ -26,7 +27,7 @@ def speech_to_text(record=True, play_recording=False) -> str:
     # Get voice recording
     voice_recording_path = ""
     if record:
-        voice_recording_path = _record_voice_request()
+        voice_recording_path = _record_voice_request_dyn()
     else:
         voice_recording_path = _pick_random_prerecorded_request()
 
@@ -137,6 +138,86 @@ def _record_voice_request() -> str:
 
     return mp3_path
 
+def _record_voice_request_dyn() -> str:
+    """
+    Record a voice request dynamically and stop when silence is detected.
+
+    Returns:
+    str: file path to .mp3 file of voice recording
+    """
+    folder = "voice_in/tmp"
+    if not os.path.isdir(folder):
+        raise FileNotFoundError(f"Folder '{folder}' does not exist. Please create it first.")
+
+    # Recording settings
+    sample_rate = 16000  # Hz
+    max_duration = 20  # seconds
+    silence_threshold = 100  # Amplitude threshold for silence detection
+    silence_duration = 2.0  # Stop recording after x second of silence
+    min_speech_time = 5.0 # Ensure at least 2 s of speech before stopping
+
+    print("Recording ...")
+    start_time = time.time()
+    silence_start = None
+    audio_data = []
+    stop_recording = False
+
+    def callback(indata, frames, time_info, status):
+        nonlocal silence_start, stop_recording
+
+        if status:
+            print(status)
+
+        # Append audio chunk to data list
+        audio_data.append(indata.copy())
+
+        # Calculate amplitude
+        amplitude = np.abs(indata).mean()
+
+        # Ensure minimum speech time before stopping
+        elapsed_time = time.time() - start_time
+        if elapsed_time < min_speech_time:
+            return
+
+        # Silence detection logic
+        if amplitude < silence_threshold:
+            if silence_start is None:
+                silence_start = time.time()
+            elif time.time() - silence_start > silence_duration:
+                stop_recording = True  # Set flag to stop recording
+        else:
+            silence_start = None  # Reset silence timer if speaking resumes
+
+        # Stop after max duration
+        if elapsed_time >= max_duration:
+            stop_recording = True
+
+    # Start recording
+    with sd.InputStream(samplerate=sample_rate, channels=2, dtype=np.int16, callback=callback):
+        while not stop_recording:
+            sd.sleep(100)  # Sleep for a short period to allow audio processing
+
+    print("Recording finished.")
+
+    # Convert list of chunks into a NumPy array
+    audio_data = np.concatenate(audio_data, axis=0)
+
+    # Save as WAV temporarily
+    wav_path = os.path.join(folder, "temp_recording.wav")
+    write(wav_path, sample_rate, audio_data)
+
+    # Convert to MP3
+    mp3_path = os.path.join(folder, "recording.mp3")
+    audio = AudioSegment.from_wav(wav_path)
+    audio.export(mp3_path, format="mp3")
+
+    # Remove temporary WAV file
+    os.remove(wav_path)
+
+    print(f"Saved as {mp3_path}")
+
+    return mp3_path
+
 
 def _play_recording(mp3_path: str):
     """
@@ -153,5 +234,5 @@ def _play_recording(mp3_path: str):
 
 
 if __name__ == "__main__":
-    # print(speech_to_text(record=False, play_recording=True))
-    text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.")
+    print(speech_to_text(record=True, play_recording=True))
+    # text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.")
