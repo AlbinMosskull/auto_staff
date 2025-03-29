@@ -45,7 +45,7 @@ def speech_to_text(record=True, play_recording=False) -> str:
     return transcription.text
 
 
-def text_to_speech(text: str, play_result: bool=True) -> str:
+def text_to_speech(text: str, play_result: bool=True, randomize_voice=False) -> str:
     """
     Interface to convert text to speech
 
@@ -58,9 +58,15 @@ def text_to_speech(text: str, play_result: bool=True) -> str:
     client = OpenAI(api_key=_get_api_key_dev())
     mp3_path = os.path.join(os.path.dirname(__file__), "voice_out", "tmp", "speech.mp3")
     
+    voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer"]
+    voice = "coral"
+    if randomize_voice and voices:
+        voice = random.choice(voices)
+        text = text + f"\nThis was the voice of {voice}"
+    
     with client.audio.speech.with_streaming_response.create(
         model="gpt-4o-mini-tts",
-        voice="coral",
+        voice=voice,
         input=text,
         response_format="mp3"
     ) as response:
@@ -234,5 +240,5 @@ def _play_recording(mp3_path: str):
 
 
 if __name__ == "__main__":
-    print(speech_to_text(record=True, play_recording=True))
-    # text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.")
+    # print(speech_to_text(record=True, play_recording=True))
+    text_to_speech("Take the blue line 10 for 5 stops. Estimated travel time: 7 min.", randomize_voice=True)
