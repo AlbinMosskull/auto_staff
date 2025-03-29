@@ -1,10 +1,31 @@
 import requests
 import openai
+from enum import Enum
+
 from pydantic import BaseModel
+from tickets import (
+	get_ticket_types,
+	get_traveler_types,
+	get_price
+)
 
 
 class StationResponse(BaseModel):
     station_name: str
+
+
+class TicketResponse(BaseModel):
+	ticket_type: str
+	traveler_type: str
+
+
+class ResponseType(Enum):
+	ROUTE_PLANNING = "route_planning"
+	TICKET_PURCHASE = "ticket_purchase"
+
+
+class ResponseMessage(BaseModel):
+	response_type: ResponseType
 
 
 def create_gpt3_client(api_key):
@@ -118,7 +139,7 @@ def create_response_route_info_message(route_info):
 
 
 
-def manage_incoming_message(message, client, model, origin_id, sl_api_key):
+def manage_route_planning_request(message, client, model, origin_id, sl_api_key):
 	# Currently we always assume the request is a route planning request
 	destination_name = parse_destination(message, client, model)
 	if not destination_name:
@@ -146,6 +167,65 @@ def manage_incoming_message(message, client, model, origin_id, sl_api_key):
 	return create_response_route_info_message(route_info)
 
 
+def format_ticket_info(ticket_type, traveler_type):
+	return f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK"
+
+
+def parse_ticket_info(prompt, client, model):
+	# Example prompt: I would like to buy a single ticket, I am a student
+
+	ticket_types = get_ticket_types()
+	traveler_types = get_traveler_types()
+
+	messages = [{"role": "system", "content": "Your task is to parse the ticket type and traveler type from a user prompt."},
+				{"role": "system", "content": "Example: I would like to buy a single ticket, I am a student. Then the correct output is 'single', 'student'."},
+				{"role": "system", "content": "Available ticket types: " + str(ticket_types)},
+				{"role": "system", "content": "Available traveler types: " + str(traveler_types)}]
+
+	response = client.beta.chat.completions.parse(
+		model=model,
+		messages= messages + 
+			[{"role": "user", "content": prompt}],
+		response_format=TicketResponse
+	)
+	if response.choices[0].message.parsed:
+		assert isinstance(response.choices[0].message.parsed, TicketResponse), "Unexpected response type."
+		ticket_type = response.choices[0].message.parsed.ticket_type
+		traveler_type = response.choices[0].message.parsed.traveler_type
+		assert ticket_type in ticket_types, "Invalid ticket type."
+		assert traveler_type in traveler_types, "Invalid traveler type."
+		print(format_ticket_info(ticket_type, traveler_type))
+	else:
+		raise ValueError("Parsing failed.")
+
+
+def manage_incoming_message(message, client, model, origin_id, sl_api_key):
+	# Determine if the message is a route planning request or a ticket purchase request
+	# by doing a model call
+
+	messages = [{"role": "system", "content": "Your task is to determine if the user is asking for route planning or ticket purchase."},
+				{"role": "system", "content": "Example: I would like to go to T-Centralen. Then the correct output is 'route planning'."},
+				{"role": "system", "content": "Example: I would like to buy a single ticket, I am a student. Then the correct output is 'ticket purchase'."}]
+	
+	response = client.beta.chat.completions.parse(
+		model=model,
+		messages= messages + 
+			[{"role": "user", "content": message}],
+		response_format=ResponseMessage
+	)
+	if response.choices[0].message.parsed:
+		message_type = response.choices[0].message.parsed.response_type.value
+		if message_type == ResponseType.ROUTE_PLANNING.value:
+			return manage_route_planning_request(message, client, model, origin_id, sl_api_key)
+		elif message_type == ResponseType.TICKET_PURCHASE.value:
+			return parse_ticket_info(message, client, model)
+		else:
+			return "Unknown request type."
+	else:
+		return "Parsing failed."
+
+
+
 def manage_incoming_message_default_settings(prompt):
 	f = open('./apikey.txt', 'r', encoding='utf-8')
 	CHATGPT_API_KEY = f.readlines()[0]
@@ -167,7 +247,7 @@ def main():
 
 	while True:
 		print("")
-		user_input = input("Where would you like to go? ")
+		user_input = input("What can I help you with? ")
 		manage_incoming_message(user_input, client, GPT_MODEL, CURRENT_STATION_ID, SL_API_KEY)
 
 
