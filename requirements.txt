@@ -8,6 +8,8 @@ tk
 flask
 flask-cors
 
+websocket-client
+
 # Audio
 sounddevice # record audio
 pydub       # record audio

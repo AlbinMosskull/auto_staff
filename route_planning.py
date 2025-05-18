@@ -1,4 +1,5 @@
 import requests
+import json
 
 
 def lookup_station_id(station_name, api_key):
@@ -114,3 +115,34 @@ def manage_route_planning_request(destination_name, origin_id, sl_api_key):
 		return
 
 	return create_response_route_info_message(route_info)
+
+
+def construct_route_planning_realtime_tool():
+    return {
+        "type": "function",
+        "name": "plan_route",
+        "description": "Plans a route to a destination.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "destination_name": {
+              "type": "string",
+              "description": "The name of the destination.",
+            }
+          },
+          "required": ["destination_name"]
+        }
+    }
+
+
+def provide_realtime_route_planning_response(destination_name, call_id, origin_id, sl_api_key):
+    print("#### ROUTE PLANNING FUNCTION CALL ####")
+    return {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps({"route": manage_route_planning_request(destination_name, origin_id, sl_api_key)})
+        }
+    }
+

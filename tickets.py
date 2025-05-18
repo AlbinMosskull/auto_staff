@@ -1,3 +1,5 @@
+import json
+
 
 _TICKET_TYPES = {
     "single": {"normal": 43, "retiree": 26, "student": 26, "youth": 26},
@@ -28,3 +30,39 @@ def parse_ticket_info(ticket_type, traveler_type):
 	ticket_info = format_ticket_info(ticket_type, traveler_type)
 	print(ticket_info)
 	return ticket_info
+
+def construct_ticket_purchase_tool():
+	return {
+        "type": "function",
+        "name": "purchase_ticket",
+        "description": "Purchase a ticket.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ticket_type": {
+                    "type": "string",
+                    "description": "The type of ticket to purchase.",
+                    "enum": get_ticket_types()
+                },
+                "traveler_type": {
+                    "type": "string",
+                    "description": "The type of traveler.",
+                    "enum": get_traveler_types()
+                }
+            },
+            "required": ["ticket_type", "traveler_type"]
+        }
+    }
+
+
+def provide_realtime_ticket_purchase_response(ticket_type, traveler_type, call_id):
+    print("#### TICKET FUNCTION CALL ####")
+    return {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps({"Ticket": parse_ticket_info(ticket_type, traveler_type)})
+        }
+    }
+
