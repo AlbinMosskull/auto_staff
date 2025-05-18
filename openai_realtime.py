@@ -12,11 +12,11 @@ import time
 
 from route_planning import (
     construct_route_planning_realtime_tool,
-    provide_realtime_route_planning_response,
+    manage_route_planning_request,
 )
 from tickets import (
     construct_ticket_purchase_tool,
-    provide_realtime_ticket_purchase_response,
+    parse_ticket_info,
 )
 
 # Temporarily keeping these here. Should probably be moved to a config file.
@@ -78,6 +78,7 @@ class OpenAIRealtimeClient:
         self.last_call_id = None
         self.ws_app = None
         self.ws_thread = None
+        self.last_function_return_value = None
 
     def on_open(self, ws):
         print("WebSocket connection opened.")
@@ -118,6 +119,8 @@ class OpenAIRealtimeClient:
         server_event = json.loads(message)
         event_type = server_event.get("type")
         
+        prev_call_id = self.last_call_id
+
         if event_type == "response.audio.delta":
             audio_base64 = server_event.get("delta", "")
             if audio_base64:
@@ -139,7 +142,19 @@ class OpenAIRealtimeClient:
                     print(f"Function call detected for planning route to: {destination_name}")
                     self.last_call_id = call_id
                     
-                    function_result = provide_realtime_route_planning_response(destination_name, call_id, CURRENT_STATION_ID, SL_API_KEY)
+                    route_planning_dict = manage_route_planning_request(destination_name, CURRENT_STATION_ID, SL_API_KEY)
+                    route_planning_dict["call_id"] = call_id
+                    self.last_function_return_value = route_planning_dict
+
+                    function_result = {
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": json.dumps({"route": route_planning_dict})
+                        }
+                    }
+
                     ws.send(json.dumps(function_result))
                     
                     ws.send(json.dumps({"type": "response.create"}))
@@ -152,7 +167,18 @@ class OpenAIRealtimeClient:
                     print(f"Function call detected for purchasing ticket: {ticket_type} for {traveler_type}")
                     self.last_call_id = call_id
                     
-                    function_result = provide_realtime_ticket_purchase_response(ticket_type, traveler_type, call_id)
+                    ticket_info = parse_ticket_info(ticket_type, traveler_type)
+                    ticket_info["call_id"] = call_id
+                    self.last_function_return_value = ticket_info
+                    
+                    function_result = {
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": json.dumps({"Ticket": ticket_info})
+                        }
+                    }
                     ws.send(json.dumps(function_result))
                     
                     ws.send(json.dumps({"type": "response.create"}))
@@ -161,6 +187,14 @@ class OpenAIRealtimeClient:
         else:
             pass
             # print("Received event:", json.dumps(server_event, indent=2))
+
+        if self.last_call_id != prev_call_id:
+            if hasattr(self, '_set_pending_action_callback') and self._set_pending_action_callback:
+                    self._set_pending_action_callback(self.last_function_return_value)
+                    print("Client called callback to set pending action.")
+            else:
+                print("Warning: _set_pending_action_callback not set on client. Cannot signal action.")
+
 
     def run(self):
         self.ws_app = websocket.WebSocketApp(
@@ -194,3 +228,6 @@ class OpenAIRealtimeClient:
         except KeyboardInterrupt:
             print("Interrupted by user.")
         self.stop()
+
+    def set_pending_action_callback(self, callback_func):
+        self._set_pending_action_callback = callback_func

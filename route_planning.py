@@ -66,32 +66,33 @@ def parse_duration(duration):
 	return duration[2:-1]
 
 
-def create_response_route_info_message(route_info):
+def create_response_route_info_message(route_info) -> dict:
 	if not 'Trip' in route_info:
 		return "No trips found for the given stations."
 
 	# Get the first trip only
-	response_message = ""
+	response = {"type": "route_info"}
 	trip = route_info['Trip'][0]
 	leg_list = trip.get('LegList', {}).get('Leg', [])
 	if leg_list:
 		duration = parse_duration(trip.get('duration'))
-		print("\nTrip details:")
-		for leg in leg_list:
+		response["legs"] = []
+		for i, leg in enumerate(leg_list):
 			transport = leg.get('Product', {}).get('name', 'Walking')
 			origin = leg['Origin']['name']
 			destination = leg['Destination']['name']
-			response_message += f"Take the {transport} from {origin} to {destination}\n"
+			response["legs"].append(f"Take the {transport} from {origin} to {destination}")
 			print(f"Take the {transport} from {origin} to {destination}")
-		response_message += f"Total duration: {duration} minutes"
+		response["total_duration"] = f"{duration} minutes"
 		print(f"Total duration: {duration} minutes")
-		return response_message
+		return response
 	else:
-		return "No trip details found."
+		return {"Error": "No trip details found."}
 
 
 
 def manage_route_planning_request(destination_name, origin_id, sl_api_key):
+	print("#### ROUTE PLANNING FUNCTION CALL ####")
 	if not destination_name:
 		print("Sorry, I couldn't understand the destination you provided. Please try again.")
 		return
@@ -135,14 +136,4 @@ def construct_route_planning_realtime_tool():
     }
 
 
-def provide_realtime_route_planning_response(destination_name, call_id, origin_id, sl_api_key):
-    print("#### ROUTE PLANNING FUNCTION CALL ####")
-    return {
-        "type": "conversation.item.create",
-        "item": {
-            "type": "function_call_output",
-            "call_id": call_id,
-            "output": json.dumps({"route": manage_route_planning_request(destination_name, origin_id, sl_api_key)})
-        }
-    }
 

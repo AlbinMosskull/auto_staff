@@ -23,10 +23,16 @@ def get_price(ticket_type, traveler_type):
 
 def format_ticket_info(ticket_type, traveler_type):
 	# Hack below. Seems to be needed for openai api.
-	return str(f"Ticket type: {ticket_type}, Traveler type: {traveler_type}, Price: {get_price(ticket_type, traveler_type)} SEK")
+	return {
+		"type": "ticket",
+		"ticket_type": ticket_type,
+		"traveler_type": traveler_type,
+        "price": get_price(ticket_type, traveler_type)
+    }
 
 
 def parse_ticket_info(ticket_type, traveler_type):
+	print("#### TICKET FUNCTION CALL ####")
 	ticket_info = format_ticket_info(ticket_type, traveler_type)
 	print(ticket_info)
 	return ticket_info
@@ -54,15 +60,4 @@ def construct_ticket_purchase_tool():
         }
     }
 
-
-def provide_realtime_ticket_purchase_response(ticket_type, traveler_type, call_id):
-    print("#### TICKET FUNCTION CALL ####")
-    return {
-        "type": "conversation.item.create",
-        "item": {
-            "type": "function_call_output",
-            "call_id": call_id,
-            "output": json.dumps({"Ticket": parse_ticket_info(ticket_type, traveler_type)})
-        }
-    }
 
