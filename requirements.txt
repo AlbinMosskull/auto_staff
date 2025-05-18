@@ -7,11 +7,12 @@ pydantic
 tk
 flask
 flask-cors
+pandas
 
 websocket-client
 
 # Audio
 sounddevice # record audio
 pydub       # record audio
-simpleaudio # listen to audio
+simpleaudio-patched # listen to audio
 # also need to install ffmpeg from github to record audio

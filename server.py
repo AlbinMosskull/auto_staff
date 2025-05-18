@@ -44,7 +44,7 @@ def run_program():
     print("Start talking to the assistant...")
 
     # Kill the thread after some time
-    time_until_kill = 60
+    time_until_kill = 120
     realtime_client.keep_alive_for(time_until_kill)
     print("WebSocket connection closed.")
 
